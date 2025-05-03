@@ -1,5 +1,5 @@
 \venv
 .vscode
 *.csv
-*.parquet
+raw_data/
 *.pyc
