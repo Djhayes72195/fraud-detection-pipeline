@@ -1,1 +1,5 @@
 \venv
+.vscode
+*.csv
+*.parquet
+*.pyc
