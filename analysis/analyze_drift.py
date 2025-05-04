@@ -18,8 +18,7 @@ def plot_feature_distributions():
         plt.figure(figsize=(8, 4))
         for day in DAYS:
             df = load_day(day)
-            # Optional: exclude outliers
-            df = df[df[feature] < df[feature].quantile(0.99)]
+            df = df[df[feature] < df[feature].quantile(0.99)]  # exclude outliers for visibility
             plt.hist(df[feature], bins=100, alpha=0.4, label=f"Day {day}", density=True)
         plt.title(f"Distribution of {feature}")
         plt.xlabel(feature)

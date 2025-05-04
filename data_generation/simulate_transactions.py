@@ -1,12 +1,25 @@
 import pandas as pd
+import boto3
+from io import BytesIO
 from pathlib import Path
 from datetime import timedelta, date
 import numpy as np
 from utils import deliver_original_data
+import argparse
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Simulate 30 days of fraud data")
+    parser.add_argument("--output-target", choices=["s3", "local"], default="local",
+                        help="Where to write daily partitions")
+    return parser.parse_args()
+
 
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "raw_data"
+s3 = boto3.client("s3")
+S3_BUCKET = "fraud-pipeline-daily-data"
+S3_PREFIX = "raw/fraud"
 
-def simulate_30_day_dataset(df_base: pd.DataFrame) -> pd.DataFrame:
+def simulate_30_day_dataset(df_base: pd.DataFrame, output_target: str) -> pd.DataFrame:
     """
     Expands a base dataset into 30 days of synthetic data with light drift.
 
@@ -22,8 +35,12 @@ def simulate_30_day_dataset(df_base: pd.DataFrame) -> pd.DataFrame:
     ]
 
     for day in range(30):
-        if day not in [5, 15, 25]:  # For local testing
-            continue
+
+        # Write sample if local
+        if output_target == "local":
+            if day not in [5, 15, 25]:
+                continue
+
         df_day = df_base.copy()
         df_day["Day"] = day
 
@@ -40,15 +57,24 @@ def simulate_30_day_dataset(df_base: pd.DataFrame) -> pd.DataFrame:
             df_day = last_10_perturbation(df_day, V_cols)
 
         # Replace with S3 integration when we scale
-        write_sim_day(df_day, day)
+        write_sim_day(df_day, day, output_target)
 
-def write_sim_day(df_day, day):
+def write_sim_day(df_day, day, output_target):
     batch_date = date(2021, 1, 1) + timedelta(days=day)
-    out_path = OUTPUT_DIR / str(batch_date)
-    out_path.mkdir(parents=True, exist_ok=True)
 
-    df_day.to_parquet(out_path / "transactions.parquet", index=False)
-    print(f"Saved {len(df_day)} rows to {out_path / 'transactions.parquet'}")
+    if output_target == "s3":
+        s3_key = f"{S3_PREFIX}/dt={batch_date}/transactions.parquet"
+        buffer = BytesIO()
+        df_day.to_parquet(buffer, index=False)
+        buffer.seek(0)
+        s3.put_object(Bucket=S3_BUCKET, Key=s3_key, Body=buffer.getvalue())
+        print(f"Uploaded {len(df_day)} rows to s3://{S3_BUCKET}/{s3_key}")
+    else:  # local
+        out_path = OUTPUT_DIR / str(batch_date)
+        out_path.mkdir(parents=True, exist_ok=True)
+        df_day.to_parquet(out_path / "transactions.parquet", index=False)
+        print(f"Saved {len(df_day)} rows to {out_path / 'transactions.parquet'}")
+
 
 def first_10_perturbation(df_day, V_cols):
     """
@@ -122,5 +148,7 @@ def last_10_perturbation(df_day, V_cols):
     return df_day
 
 if __name__ == "__main__":
-    df_base = deliver_original_data()  # Loads and normalizes timestamps inside
-    simulate_30_day_dataset(df_base)
+    args = parse_args()
+    df_base = deliver_original_data()
+    simulate_30_day_dataset(df_base, args.output_target)
+
