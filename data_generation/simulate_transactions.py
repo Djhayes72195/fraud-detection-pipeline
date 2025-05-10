@@ -6,6 +6,7 @@ from datetime import timedelta, date
 import numpy as np
 from utils import deliver_original_data
 import argparse
+from data_processing.config import OUTPUT_DIR, S3_BUCKET, S3_PREFIX
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simulate 30 days of fraud data")
@@ -13,11 +14,7 @@ def parse_args():
                         help="Where to write daily partitions")
     return parser.parse_args()
 
-
-OUTPUT_DIR = Path(__file__).resolve().parents[1] / "raw_data"
 s3 = boto3.client("s3")
-S3_BUCKET = "fraud-pipeline-daily-data"
-S3_PREFIX = "raw/fraud"
 
 def simulate_30_day_dataset(df_base: pd.DataFrame, output_target: str) -> pd.DataFrame:
     """
