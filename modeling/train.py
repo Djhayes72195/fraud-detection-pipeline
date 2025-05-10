@@ -30,9 +30,9 @@ def train(df):
 
     model.fit(X_train, y_train)
 
-    # 5. Evaluate
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
 
     print(classification_report(y_test, y_pred))
     print("ROC AUC:", roc_auc_score(y_test, y_prob))
+    return model
