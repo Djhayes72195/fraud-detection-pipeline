@@ -121,7 +121,6 @@ def last_10_perturbation(df_day, V_cols):
     fraud = df_day[df_day["Class"] == 1].copy()
     nonfraud = df_day[df_day["Class"] == 0].copy()
 
-    # Perturb non-fraud lightly (same as first_10_perturbation)
     for col in V_cols:
         nonfraud[col] += np.random.normal(0, 0.02, size=len(nonfraud))
     nonfraud["Time"] += np.random.normal(0, 300, size=len(nonfraud))
@@ -129,7 +128,8 @@ def last_10_perturbation(df_day, V_cols):
     nonfraud["Amount"] += np.random.normal(loc=0, scale=5, size=len(nonfraud))
     nonfraud["Amount"] = nonfraud["Amount"].clip(lower=0.01)
 
-    # Generate bot fraud
+    max_id = max(df_day["uid"])
+
     bot_fraud = fraud.sample(frac=2.0, replace=True).copy()
     drift_cols = [col for col in V_cols if col in ["V10", "V11", "V12", "V13"]]
     for col in drift_cols:
@@ -139,7 +139,6 @@ def last_10_perturbation(df_day, V_cols):
     bot_fraud["Amount"] += np.random.normal(loc=0, scale=15, size=len(bot_fraud))
     bot_fraud["Amount"] = bot_fraud["Amount"].clip(lower=0.01)
 
-    # Merge and mark
     df_day = pd.concat([nonfraud, fraud, bot_fraud], ignore_index=True)
     df_day["PerturbationScheme"] = 3
     return df_day
