@@ -11,6 +11,7 @@ if __name__ == "__main__":
     s3_path = f"s3://your-bucket/path/model_day_{args.day}.parquet"
 
     stream_transactions(
+        args.day,
         api_url="http://localhost:8000/predict",
         delay=args.rate
     )
