@@ -1,7 +1,7 @@
 from data_processing.data_ingestion import load_days
 from data_processing.preprocessor import preprocess
 from modeling.train import train
-from modeling.save import save
+from modeling.model_io import save
 
 
 first_day = 1
