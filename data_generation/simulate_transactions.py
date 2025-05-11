@@ -27,7 +27,8 @@ def simulate_30_day_dataset(df_base: pd.DataFrame, output_target: str) -> pd.Dat
         x for x in df_base.columns if x not in [
             "Time",
             "Amount",
-            "Class"
+            "Class",
+            "sid"
         ]
     ]
 
@@ -114,7 +115,7 @@ def middle_10_perturbation(df_day, V_cols):
 
 def last_10_perturbation(df_day, V_cols):
     """
-    Apply concept drift by modifying fraud patterns in Days 20–29.
+    Apply concept drift by modifying fraud patterns in Days 20-29.
     Amplifies fraud volume and shifts its feature distributions,
     while still perturbing non-fraud to avoid trivial separation.
     """
@@ -128,7 +129,6 @@ def last_10_perturbation(df_day, V_cols):
     nonfraud["Amount"] += np.random.normal(loc=0, scale=5, size=len(nonfraud))
     nonfraud["Amount"] = nonfraud["Amount"].clip(lower=0.01)
 
-    max_id = max(df_day["uid"])
 
     bot_fraud = fraud.sample(frac=2.0, replace=True).copy()
     drift_cols = [col for col in V_cols if col in ["V10", "V11", "V12", "V13"]]

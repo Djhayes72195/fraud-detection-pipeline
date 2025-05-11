@@ -5,7 +5,7 @@ from modeling.save import save
 
 
 first_day = 1
-last_day = 5
+last_day = 1
 df = load_days(first_day, last_day)
 df = preprocess(df)
 model = train(df)
