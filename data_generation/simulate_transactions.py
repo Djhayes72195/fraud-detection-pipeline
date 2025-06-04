@@ -32,7 +32,7 @@ def simulate_30_day_dataset(df_base: pd.DataFrame, output_target: str) -> pd.Dat
         ]
     ]
 
-    for day in range(30):
+    for day in range(1, 31):
 
         # Write sample if local
         if output_target == "local":
@@ -42,16 +42,18 @@ def simulate_30_day_dataset(df_base: pd.DataFrame, output_target: str) -> pd.Dat
         df_day = df_base.copy()
         df_day["Day"] = day
 
-        # Original dataset has two days. I want to simulate a single day per file
+        # Original dataset has two days. We want to simulate a single day per file
         df_day["Time"] = df_day["Time"] % 86400  # 86400 seconds in a day
 
-        if day < 10:
+        df_day["TransactionID"] = day * 10_000_000 + df_day.reset_index().index
+
+        if day <= 10:
             df_day = first_10_perturbation(df_day, V_cols)
 
-        elif day >= 10 and day < 20:
+        elif day > 10 and day <= 20:
             df_day = middle_10_perturbation(df_day, V_cols)
 
-        else: # day >= 20
+        else: # days 20-30
             df_day = last_10_perturbation(df_day, V_cols)
 
         # Replace with S3 integration when we scale
@@ -60,7 +62,7 @@ def simulate_30_day_dataset(df_base: pd.DataFrame, output_target: str) -> pd.Dat
 def write_sim_day(df_day, day, output_target):
     batch_date = date(2021, 1, 1) + timedelta(days=day)
 
-    if output_target == "s3":
+    if output_target == "s3":  # NOTE: Will overwrite previous contents
         s3_key = f"{S3_PREFIX}/dt={batch_date}/transactions.parquet"
         buffer = BytesIO()
         df_day.to_parquet(buffer, index=False)
