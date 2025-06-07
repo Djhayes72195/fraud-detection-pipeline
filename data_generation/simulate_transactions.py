@@ -56,11 +56,10 @@ def simulate_30_day_dataset(df_base: pd.DataFrame, output_target: str) -> pd.Dat
         else: # days 20-30
             df_day = last_10_perturbation(df_day, V_cols)
 
-        # Replace with S3 integration when we scale
         write_sim_day(df_day, day, output_target)
 
 def write_sim_day(df_day, day, output_target):
-    batch_date = date(2021, 1, 1) + timedelta(days=day)
+    batch_date = date(2021, 1, 1) + timedelta(days=day-1)
 
     if output_target == "s3":  # NOTE: Will overwrite previous contents
         s3_key = f"{S3_PREFIX}/dt={batch_date}/transactions.parquet"
@@ -70,7 +69,7 @@ def write_sim_day(df_day, day, output_target):
         s3.put_object(Bucket=S3_BUCKET, Key=s3_key, Body=buffer.getvalue())
         print(f"Uploaded {len(df_day)} rows to s3://{S3_BUCKET}/{s3_key}")
     else:  # local
-        out_path = OUTPUT_DIR / str(batch_date)
+        out_path = OUTPUT_DIR / batch_date.strftime("%Y-%m-%d")
         out_path.mkdir(parents=True, exist_ok=True)
         df_day.to_parquet(out_path / "transactions.parquet", index=False)
         print(f"Saved {len(df_day)} rows to {out_path / 'transactions.parquet'}")

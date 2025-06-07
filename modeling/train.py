@@ -81,7 +81,8 @@ def write_metadata(train_ids, hyperparams):
     """
     train_ids_hash = hashlib.md5(json.dumps(train_ids, sort_keys=True).encode()).hexdigest()
 
-    train_ids_file_path = TRAIN_IDS_PATH / f"train_ids_{train_ids_hash}.json"
+    os.makedirs(TRAIN_IDS_PATH, exist_ok=True)
+    train_ids_file_path = TRAIN_IDS_PATH / f"{train_ids_hash}.json"
     with open(train_ids_file_path, "w") as f:
         json.dump(train_ids, f, indent=4)
 
@@ -94,6 +95,7 @@ def write_metadata(train_ids, hyperparams):
         "train_timestamp": datetime.utcnow().isoformat()
     }
 
+    os.makedirs(MODEL_METADATA_PATH, exist_ok=True)
     model_metadata_file_path = MODEL_METADATA_PATH / f"model_{model_id}.json"
     with open(model_metadata_file_path, "w") as f:
         json.dump(model_metadata, f, indent=4)
