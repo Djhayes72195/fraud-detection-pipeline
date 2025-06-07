@@ -31,3 +31,4 @@ class Transaction(BaseModel):
     V27: float
     V28: float
     Amount: float
+    TransactionID: int
