@@ -15,7 +15,6 @@ COPY api/ ./api
 COPY inference/ ./inference
 COPY modeling/ ./modeling
 COPY model_registry/ ./model_registry
-COPY logs/ ./logs
 
 # Expose FastAPI port
 EXPOSE 8000
