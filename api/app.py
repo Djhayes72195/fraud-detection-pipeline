@@ -6,6 +6,7 @@ from inference.predict import predict_and_log
 from modeling.model_io import load_by_day
 
 # uvicorn api.app:app --reload
+# uvicorn api.app:app --port 8000
 
 LOG_PATH = Path("logs/stream_day5.jsonl")
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -16,7 +17,7 @@ def api_logger(log_entry):
     log_file.flush()  # Forces to empty buffer and write to disk, avoids lost logs
 
 
-model = load_by_day(day=5)  # load once at startup
+model = load_by_day(day=1)  # load once at startup
 app = FastAPI()
 
 @app.post("/predict")

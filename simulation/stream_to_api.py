@@ -8,8 +8,6 @@ if __name__ == "__main__":
     parser.add_argument("--model_day", type=int, default=5, help="Day of model being served")
     args = parser.parse_args()
 
-    s3_path = f"s3://your-bucket/path/model_day_{args.day}.parquet"
-
     stream_transactions(
         args.day,
         api_url="http://localhost:8000/predict",

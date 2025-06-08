@@ -10,4 +10,3 @@ df = load_days(first_day, last_day)
 df = preprocess(df)
 model = train(df)
 save(model, last_day)
-# Save model off

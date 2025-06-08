@@ -3,18 +3,11 @@ import hashlib
 import datetime
 import json
 import xgboost as xgb
+from modeling.versioned_model import VersionedModel
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, roc_auc_score
 from .config import TRAIN_AND_VAL_SIDS_PATH, TRAIN_IDS_PATH, MODEL_METADATA_PATH
 
-import os
-import hashlib
-from datetime import datetime
-import json
-import xgboost as xgb
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, roc_auc_score
-from .config import TRAIN_AND_VAL_SIDS_PATH, TRAIN_IDS_PATH, MODEL_METADATA_PATH
 
 def make_model_id(hyperparams, train_ids_hash):
     """Create a unique model ID using hyperparams and train data hash"""
@@ -26,14 +19,15 @@ def make_model_id(hyperparams, train_ids_hash):
     return hashlib.md5(json_str.encode()).hexdigest()
 
 def train(df):
-    transaction_ids = df[["TransactionID", "sid"]]
 
-    X = df.drop(columns=["Class", "Day", "PerturbationScheme", "dt", "TransactionID"])
-    y = df[["Class", "sid"]]
+    X = df.drop(columns=["Class", "Day", "PerturbationScheme", "dt"])
+    y = df[["Class", "sid", "TransactionID"]]
 
     X_train, X_val, X_test, y_train, y_val, y_test = _persistent_data_split(X, y)
 
-    train_ids = list(transaction_ids.loc[X_train.index, "TransactionID"])
+    train_ids = list(X_train["TransactionID"])
+    X_train = X_train.drop(columns=["TransactionID", "sid"])
+    X_val = X_val.drop(columns=["TransactionID", "sid"])
 
     scale_pos_weight = len(y_train[y_train == 0]) / len(y_train[y_train == 1])
 
@@ -61,9 +55,9 @@ def train(df):
 
     model_id = write_metadata(train_ids, hyperparams)
 
-    model.version = model_id
+    versioned_model = VersionedModel(model, model_id)
 
-    return model
+    return versioned_model
 
 def write_metadata(train_ids, hyperparams):
     """
@@ -92,7 +86,7 @@ def write_metadata(train_ids, hyperparams):
         "model_id": model_id,
         "hyperparameters": hyperparams,
         "train_ids_hash": train_ids_hash,
-        "train_timestamp": datetime.utcnow().isoformat()
+        "train_timestamp": datetime.datetime.utcnow().isoformat()
     }
 
     os.makedirs(MODEL_METADATA_PATH, exist_ok=True)
@@ -104,6 +98,11 @@ def write_metadata(train_ids, hyperparams):
 
 
 def _persistent_data_split(X, y):
+    """
+    Applies persistent data split
+    
+    Since 
+    """
     if os.path.exists(TRAIN_AND_VAL_SIDS_PATH):
         with open(TRAIN_AND_VAL_SIDS_PATH, 'r') as f:
             saved_ids = json.load(f)
@@ -134,7 +133,7 @@ def _persistent_data_split(X, y):
             json.dump({"train": train_sids, "val": val_sids}, f, indent=4)
 
     for df in [X_train, X_val, X_test, y_train, y_val, y_test]:
-        df.drop(columns=["sid"], inplace=True)
+        df = df.drop(columns=["sid"])
 
     return (
         X_train,

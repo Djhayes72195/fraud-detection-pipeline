@@ -7,7 +7,7 @@ def stream_transactions(day: int, api_url: str, delay: float = 0.1):
 
     for _, row in df.iterrows():
         transaction = row.drop(["Class", "sid"]).to_dict()
-
+        print(f"Transaction {transaction["TransactionID"]} loaded from source.")
         try:
             response = requests.post(api_url, json=transaction)
             print(f"→ {response.status_code}: {response.json() if response.ok else response.text}")
