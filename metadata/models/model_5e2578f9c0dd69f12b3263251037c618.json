@@ -1,0 +1,14 @@
+{
+    "model_id": "5e2578f9c0dd69f12b3263251037c618",
+    "hyperparameters": {
+        "objective": "binary:logistic",
+        "eval_metric": "auc",
+        "scale_pos_weight": 578.264406779661,
+        "n_estimators": 100,
+        "max_depth": 4,
+        "learning_rate": 0.1,
+        "random_state": 42
+    },
+    "train_ids_hash": "2df843efceae1ef5c0f0f011f545b66d",
+    "train_timestamp": "2025-06-08T19:54:43.859184"
+}
