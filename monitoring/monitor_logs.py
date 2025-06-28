@@ -6,6 +6,7 @@ Monitor logs in realtime.
 
 import json
 from pathlib import Path
+import pandas as pd
 from statistics import mean
 import time
 
@@ -32,6 +33,8 @@ def monitor_log(log_path: Path, poll_interval=5):
                 latencies.append(entry["latency_sec"])
                 versions.add(entry.get("model_version", "unknown"))
 
+            drift_scores = calculate_drift(transactions)
+
             print(f"\n--- Metrics Update ({len(new_entries)} new) ---")
             print(f"Total predictions: {len(predictions)}")
             print(f"Fraud ratio: {sum(predictions) / len(predictions):.3f}")
@@ -40,5 +43,33 @@ def monitor_log(log_path: Path, poll_interval=5):
 
         time.sleep(poll_interval)
 
+
+def calculate_drift(transactions):
+    """Calculate data drift"""
+    df = pd.DataFrame(transactions)
+    drift_scores = {}
+
+    for col in df.columns:
+        if col not in baseline_stats:
+            continue
+        live_mean = df[col].mean()
+        base_mean = baseline_stats[col]["mean"]
+        base_std = baseline_stats[col]["std"]
+
+        if base_std > 0:
+            drift_score = abs(live_mean - base_mean) / base_std
+            drift_scores[col] = drift_score
+
+    return drift_scores
+
+
 if __name__ == "__main__":
-    monitor_log(Path("C:\\Users\\Djhay\\OneDrive\\Desktop\\Projects\\fraud-detection-pipeline\\logs\\stream_day5.jsonl"))
+    base_path = Path(__file__).resolve().parents[1] / "logs"
+    baseline_stats_path = base_path / "baseline_stats.json"
+    streaming_logs_path = base_path / "stream_day5.jsonl"
+
+    with open(baseline_stats_path, "r") as f:
+        baseline_stats = json.load(f)
+
+    streaming_logs_path = base_path / "stream_day5.jsonl"
+    monitor_log(streaming_logs_path)
