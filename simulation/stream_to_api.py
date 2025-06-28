@@ -1,4 +1,5 @@
 import argparse
+from simulation.constants import LOCAL_ENDPOINT, EC2_ENDPOINT
 from simulation.s3_reader import stream_transactions
 
 if __name__ == "__main__":
@@ -9,7 +10,7 @@ if __name__ == "__main__":
     parser.add_argument("--destination", type=str, default="local", help="Endpoint location (ec2/local)")
     args = parser.parse_args()
 
-    api_url = "http://44.204.232.73:8000/predict" if args.destination == "ec2" else "http://localhost:8000/predict"
+    api_url = EC2_ENDPOINT if args.destination == "ec2" else LOCAL_ENDPOINT
 
     stream_transactions(
         args.day,
