@@ -10,41 +10,70 @@ import pandas as pd
 from statistics import mean
 import time
 
-def monitor_log(log_path: Path, poll_interval=5):
+
+def monitor_log(log_path: Path, baseline_stats: dict, poll_interval=5):
     seen = set()
 
+    print("Monitoring service is online.")
     while True:
-        with open(log_path, "r") as f:
-            lines = f.readlines()
-
-        new_entries = [line for line in lines if line not in seen]
-        seen.update(new_entries)
+        new_entries = identify_new_entries(log_path, seen)
 
         if new_entries:
-            predictions = []
-            latencies = []
-            transactions = []
-            versions = set()
+            (
+                predictions,
+                latencies,
+                transactions,
+                versions
+            ) = parse_new_entries(
+                new_entries
+            )
 
-            for line in new_entries:
-                entry = json.loads(line)
-                transactions.append(entry['transaction'])
-                predictions.append(entry["prediction"])
-                latencies.append(entry["latency_sec"])
-                versions.add(entry.get("model_version", "unknown"))
+            drift_scores = calculate_drift(transactions, baseline_stats)
+            analyze_drift(drift_scores)
 
-            drift_scores = calculate_drift(transactions)
-
-            print(f"\n--- Metrics Update ({len(new_entries)} new) ---")
-            print(f"Total predictions: {len(predictions)}")
-            print(f"Fraud ratio: {sum(predictions) / len(predictions):.3f}")
-            print(f"Avg latency: {mean(latencies):.3f} sec")
-            print(f"Model versions: {versions}")
+            report_metrics(new_entries, predictions, latencies, versions)
 
         time.sleep(poll_interval)
 
+def report_metrics(new_entries, predictions, latencies, versions):
+    print(f"\n--- Metrics Update ({len(new_entries)} new) ---")
+    print(f"Total predictions: {len(predictions)}")
+    print(f"Fraud ratio: {sum(predictions) / len(predictions):.3f}")
+    print(f"Avg latency: {mean(latencies):.3f} sec")
+    print(f"Model versions: {versions}")
 
-def calculate_drift(transactions):
+
+def parse_new_entries(new_entries):
+    predictions = []
+    latencies = []
+    transactions = []
+    versions = set()
+
+    for line in new_entries:
+        entry = json.loads(line)
+        transactions.append(entry["transaction"])
+        predictions.append(entry["prediction"])
+        latencies.append(entry["latency_sec"])
+        versions.add(entry.get("model_version", "unknown"))
+
+    return predictions, latencies, transactions, versions
+
+
+def identify_new_entries(log_path: Path, seen: set):
+    with open(log_path, "r") as f:
+        lines = f.readlines()
+
+    new_entries = [line for line in lines if line not in seen]
+    seen.update(new_entries)
+    return new_entries
+
+
+def analyze_drift(drift_scores):
+    # Placeholder for when we log / analyze drift
+    print("Reached analyze_drift func")
+
+
+def calculate_drift(transactions: list, baseline_stats: dict):
     """Calculate data drift"""
     df = pd.DataFrame(transactions)
     drift_scores = {}
@@ -72,4 +101,4 @@ if __name__ == "__main__":
         baseline_stats = json.load(f)
 
     streaming_logs_path = base_path / "stream_day5.jsonl"
-    monitor_log(streaming_logs_path)
+    monitor_log(streaming_logs_path, baseline_stats)

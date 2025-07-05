@@ -3,6 +3,14 @@ from .config import S3_BUCKET, S3_PREFIX
 
 
 def load_days(start_day: int, end_day: int):
+    """
+    Load data by transaction date
+    
+    - The only means by which transaction data should
+    enter our system.
+    - Contains no pre-processing. All fields, including
+    ground truths, are retrieved.
+    """
     dfs = []
     for day in range(start_day, end_day + 1):
         date_str = f"2021-01-{day:02d}"
