@@ -12,7 +12,7 @@ def predict_and_log(transaction: dict, model: VersionedModel, threshold=0.8, log
 
     start_time = time.time()
 
-    prob = model.predict_proba(df)[0, 1]
+    prob = float(model.predict_proba(df)[0, 1])
 
     latency_sec = time.time() - start_time
 
@@ -22,6 +22,7 @@ def predict_and_log(transaction: dict, model: VersionedModel, threshold=0.8, log
         "transaction": transaction,
         "transaction_id": transaction_id,
         "prediction": pred,
+        "probability": prob,
         "threshold": threshold,
         "latency_sec": latency_sec,
         "model_version": model.version,

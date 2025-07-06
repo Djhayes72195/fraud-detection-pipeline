@@ -1,0 +1,134 @@
+import json
+import time
+from pathlib import Path
+from statistics import mean
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score
+import pandas as pd
+from modeling.config import PERFORMANCE_METRICS_PATH
+from monitoring.constants import MIN_PRED_BEFORE_INFERENCE_MONITORING, RETRAIN_THRESHOLDS
+from monitoring.retraining_trigger import trigger_retraining
+
+def monitor_loop(ground_truths_path: Path, predicted_transactions_path: Path, time_interval: int = 60):
+    patched_records = set()
+    print("Monitoring service is online.")
+
+    while True:
+        predictions: pd.DataFrame = parse_transaction_data(
+            load_jsonl(predicted_transactions_path)
+        )
+        ground_truths = pd.DataFrame(
+            load_jsonl(ground_truths_path)
+        )
+
+        new_predictions = predictions[~predictions["TransactionID"].isin(patched_records)]
+        new_ground_truths = ground_truths[~ground_truths["TransactionID"].isin(patched_records)]
+
+        if len(new_predictions) < MIN_PRED_BEFORE_INFERENCE_MONITORING:
+            print(f"Inference monitoring was called with <{MIN_PRED_BEFORE_INFERENCE_MONITORING} records. Skipping evaluation.")
+            time.sleep(time_interval)
+            continue
+
+        patched_df = new_predictions.merge(new_ground_truths, on="TransactionID", how="left")
+
+        if patched_df.empty:
+            print("The record limit for inference monitoring was met, but there are no ground truth labels. This is unexpected. Please investigate.")
+            time.sleep(time_interval)
+            continue
+
+        (
+            patched_df, most_recent_model_version
+        ) = filter_to_most_recent_model(patched_df)
+        
+        base_performance_metrics = look_up_base_perf_metrics(most_recent_model_version)
+        current_metrics = calculate_current_metrics(patched_df)
+
+        should_retrain = check_if_should_retrain(base_performance_metrics, current_metrics)
+        if should_retrain:
+            trigger_retraining()
+
+    # # Validation
+    # threshold = 0.5
+    # y_prob = model.predict_proba(X_val)[:, 1]
+    # y_pred = (y_prob > threshold).astype(int)
+
+    # baseline_metrics = {
+    #     "accuracy": (y_val == y_pred).mean(),
+    #     "precision": precision_score(y_val, y_pred),
+    #     "recall": recall_score(y_val, y_pred),
+    #     "f1": f1_score(y_val, y_pred),
+    #     "roc_auc": roc_auc_score(y_val, y_prob),
+    # }
+        patched_records.update(set(patched_df["TransactionID"]))
+
+        time.sleep(time_interval)
+
+def check_if_should_retrain(base_metrics, current_metrics):
+    for metric, threshold in RETRAIN_THRESHOLDS.keys():
+        if base_metrics - current_metrics[metric] > threshold:
+            return True
+    return False
+
+
+def calculate_current_metrics(patched_df):
+    y_prob = patched_df["probability"]
+    y_pred = patched_df["prediction"]
+    truth = patched_df["Class"]
+    return {
+        "accuracy": (y_pred == truth).mean(),
+        "precision": precision_score(truth, y_pred),
+        "recall": recall_score(truth, y_pred),
+        "f1": f1_score(truth, y_pred),
+        "roc_auc": roc_auc_score(truth, y_prob)
+    }
+
+
+def filter_to_most_recent_model(patched_df):
+    """
+    Filter records down to the most recent model used.
+
+    The purpose of this service is to schedule retraining
+    if performance decays. Only records originating from
+    the current production model are relevant.
+    """
+    most_recent_model = patched_df.sort_values(
+        by="prediction_timestamp"
+    ).iloc[-1]["model_version"]
+    patched_df = patched_df[patched_df["model_version"] == most_recent_model]
+    return patched_df, most_recent_model
+
+
+def load_jsonl(path: Path):
+    if not path.exists():
+        print(f"{path} does not exist. Returning empty list.")
+        return []
+    with open(path, "r") as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+
+def parse_transaction_data(transactions: dict) -> pd.DataFrame:
+    parsed_transactions = []
+    for transaction in transactions:
+        flat_record = transaction['transaction'].copy()
+        flat_record['TransactionID'] = transaction['transaction_id']
+        flat_record['prediction'] = transaction["prediction"]
+        flat_record["probability"] = transaction["probability"]
+        flat_record["model_version"] = transaction["model_version"]
+        flat_record["prediction_timestamp"] = transaction["timestamp"]
+        parsed_transactions.append(flat_record)
+    return pd.DataFrame(parsed_transactions)
+
+
+def look_up_base_perf_metrics(most_recent_model_version):
+    base_metrics_path = PERFORMANCE_METRICS_PATH / f"metrics_{most_recent_model_version}.json"
+    if not base_metrics_path.exists():
+        print(f"Baseline metrics can not be recovered for model: {base_metrics_path}. Please investigate.")
+    with open(base_metrics_path, "r") as f:
+        base_metrics = json.load(f)
+    return base_metrics
+
+if __name__ == "__main__":
+    base_path = Path(__file__).resolve().parents[1] / "logs"
+    ground_truths_path = base_path / "ground_truths_released.jsonl"
+    predicted_transactions_path = base_path / "stream_day5.jsonl"
+
+    monitor_loop(ground_truths_path, predicted_transactions_path)

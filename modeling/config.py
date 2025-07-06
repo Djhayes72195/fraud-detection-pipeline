@@ -14,3 +14,4 @@ TRAIN_IDS_PATH = METADATA_PATH / "train_ids"
 # Used for storing hyperparameter / metadata each time a model is trained.
 MODEL_METADATA_PATH = METADATA_PATH / "models"
 
+PERFORMANCE_METRICS_PATH = METADATA_PATH / "performance"
