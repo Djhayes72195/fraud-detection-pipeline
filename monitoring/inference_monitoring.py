@@ -5,11 +5,17 @@ from statistics import mean
 from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score
 import pandas as pd
 from modeling.config import PERFORMANCE_METRICS_PATH
-from monitoring.constants import MIN_PRED_BEFORE_INFERENCE_MONITORING, RETRAIN_THRESHOLDS
+from monitoring.constants import (
+    MIN_PRED_BEFORE_INFERENCE_MONITORING,
+    RETRAIN_THRESHOLDS,
+    MIN_FRAUD_CASES_BEFORE_INFERENCE_MONITORING
+)
 from monitoring.retraining_trigger import trigger_retraining
 
 def monitor_loop(ground_truths_path: Path, predicted_transactions_path: Path, time_interval: int = 60):
+    patched_df = pd.DataFrame()
     patched_records = set()
+    fraud_cases_seen = 0
     print("Monitoring service is online.")
 
     while True:
@@ -20,18 +26,24 @@ def monitor_loop(ground_truths_path: Path, predicted_transactions_path: Path, ti
             load_jsonl(ground_truths_path)
         )
 
-        new_predictions = predictions[~predictions["TransactionID"].isin(patched_records)]
-        new_ground_truths = ground_truths[~ground_truths["TransactionID"].isin(patched_records)]
+        new_predictions = predictions[
+            ~predictions["TransactionID"].isin(patched_records)
+        ].drop_duplicates("TransactionID")
+        new_ground_truths = ground_truths[
+            ~ground_truths["TransactionID"].isin(patched_records)
+        ].drop_duplicates("TransactionID")
 
-        if len(new_predictions) < MIN_PRED_BEFORE_INFERENCE_MONITORING:
-            print(f"Inference monitoring was called with <{MIN_PRED_BEFORE_INFERENCE_MONITORING} records. Skipping evaluation.")
+        new_patched_df = new_ground_truths.merge(new_predictions, on="TransactionID", how="inner")
+        patched_records.update(new_patched_df["TransactionID"])
+        fraud_cases_seen += new_patched_df["Class"].sum()
+
+        patched_df = pd.concat([patched_df, new_patched_df], ignore_index=True)
+        if patched_df.empty:
+            print("Inference monitor has not recieved any records. Skipping.")
             time.sleep(time_interval)
             continue
 
-        patched_df = new_predictions.merge(new_ground_truths, on="TransactionID", how="left")
-
-        if patched_df.empty:
-            print("The record limit for inference monitoring was met, but there are no ground truth labels. This is unexpected. Please investigate.")
+        if not thresholds_met(patched_df, fraud_cases_seen):
             time.sleep(time_interval)
             continue
 
@@ -46,25 +58,22 @@ def monitor_loop(ground_truths_path: Path, predicted_transactions_path: Path, ti
         if should_retrain:
             trigger_retraining()
 
-    # # Validation
-    # threshold = 0.5
-    # y_prob = model.predict_proba(X_val)[:, 1]
-    # y_pred = (y_prob > threshold).astype(int)
-
-    # baseline_metrics = {
-    #     "accuracy": (y_val == y_pred).mean(),
-    #     "precision": precision_score(y_val, y_pred),
-    #     "recall": recall_score(y_val, y_pred),
-    #     "f1": f1_score(y_val, y_pred),
-    #     "roc_auc": roc_auc_score(y_val, y_prob),
-    # }
-        patched_records.update(set(patched_df["TransactionID"]))
-
         time.sleep(time_interval)
 
+def thresholds_met(patched_df, fraud_cases_seen):
+    if len(patched_df) < MIN_PRED_BEFORE_INFERENCE_MONITORING:
+        print(f"Inference monitoring was called with <{MIN_PRED_BEFORE_INFERENCE_MONITORING} records. Skipping evaluation.")
+        return False
+    if fraud_cases_seen < MIN_FRAUD_CASES_BEFORE_INFERENCE_MONITORING:
+        print(f"Inference monitoring was called with <{MIN_FRAUD_CASES_BEFORE_INFERENCE_MONITORING} true fraud cases. Skipping evaluation.")
+        return False
+    return True
+
+
 def check_if_should_retrain(base_metrics, current_metrics):
-    for metric, threshold in RETRAIN_THRESHOLDS.keys():
-        if base_metrics - current_metrics[metric] > threshold:
+    for metric, threshold in RETRAIN_THRESHOLDS.items():
+        if base_metrics[metric] - current_metrics[metric] > threshold:
+            print("Performance has degraded ---> sending retraining trigger.")
             return True
     return False
 
@@ -122,6 +131,7 @@ def look_up_base_perf_metrics(most_recent_model_version):
     base_metrics_path = PERFORMANCE_METRICS_PATH / f"metrics_{most_recent_model_version}.json"
     if not base_metrics_path.exists():
         print(f"Baseline metrics can not be recovered for model: {base_metrics_path}. Please investigate.")
+        raise FileNotFoundError
     with open(base_metrics_path, "r") as f:
         base_metrics = json.load(f)
     return base_metrics
