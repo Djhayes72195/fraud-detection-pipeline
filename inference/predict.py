@@ -15,6 +15,7 @@ def predict_and_log(transaction: dict, model: VersionedModel, threshold=0.8, log
     prob = float(model.predict_proba(df)[0, 1])
 
     latency_sec = time.time() - start_time
+    print(f"Predict latency: {latency_sec}")
 
     pred = int(prob > threshold)
 

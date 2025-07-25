@@ -1,7 +1,7 @@
 import json
 import time
 from pathlib import Path
-from statistics import mean
+from collections import deque
 from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score
 import pandas as pd
 from modeling.config import PERFORMANCE_METRICS_PATH
@@ -13,9 +13,9 @@ from monitoring.constants import (
 from monitoring.retraining_trigger import trigger_retraining
 
 def monitor_loop(ground_truths_path: Path, predicted_transactions_path: Path, time_interval: int = 60):
-    patched_df = pd.DataFrame()
+    # patched_df = pd.DataFrame()
+    record_buffer = deque(maxlen=100_000)
     patched_records = set()
-    fraud_cases_seen = 0
     print("Monitoring service is online.")
 
     while True:
@@ -25,6 +25,8 @@ def monitor_loop(ground_truths_path: Path, predicted_transactions_path: Path, ti
         ground_truths = pd.DataFrame(
             load_jsonl(ground_truths_path)
         )
+        if predictions.empty or ground_truths.empty:
+            time.sleep(time_interval)
 
         new_predictions = predictions[
             ~predictions["TransactionID"].isin(patched_records)
@@ -35,24 +37,27 @@ def monitor_loop(ground_truths_path: Path, predicted_transactions_path: Path, ti
 
         new_patched_df = new_ground_truths.merge(new_predictions, on="TransactionID", how="inner")
         patched_records.update(new_patched_df["TransactionID"])
-        fraud_cases_seen += new_patched_df["Class"].sum()
+        # fraud_cases_seen += new_patched_df["Class"].sum()
 
-        patched_df = pd.concat([patched_df, new_patched_df], ignore_index=True)
-        if patched_df.empty:
-            print("Inference monitor has not recieved any records. Skipping.")
+        for row in new_patched_df.to_dict("records"):
+            record_buffer.append(row)
+
+        buffer_df = pd.DataFrame(record_buffer)
+        if buffer_df.empty:
+            print("Inference monitor buffer is empty. Skipping.")
             time.sleep(time_interval)
             continue
 
-        if not thresholds_met(patched_df, fraud_cases_seen):
+
+        buffer_df, most_recent_model_version = filter_to_most_recent_model(buffer_df)
+
+        fraud_cases_seen = buffer_df["Class"].sum()
+        if not thresholds_met(buffer_df, fraud_cases_seen):
             time.sleep(time_interval)
             continue
 
-        (
-            patched_df, most_recent_model_version
-        ) = filter_to_most_recent_model(patched_df)
-        
         base_performance_metrics = look_up_base_perf_metrics(most_recent_model_version)
-        current_metrics = calculate_current_metrics(patched_df)
+        current_metrics = calculate_current_metrics(buffer_df)
 
         should_retrain = check_if_should_retrain(base_performance_metrics, current_metrics)
         if should_retrain:
@@ -60,8 +65,8 @@ def monitor_loop(ground_truths_path: Path, predicted_transactions_path: Path, ti
 
         time.sleep(time_interval)
 
-def thresholds_met(patched_df, fraud_cases_seen):
-    if len(patched_df) < MIN_PRED_BEFORE_INFERENCE_MONITORING:
+def thresholds_met(df, fraud_cases_seen):
+    if len(df) < MIN_PRED_BEFORE_INFERENCE_MONITORING:
         print(f"Inference monitoring was called with <{MIN_PRED_BEFORE_INFERENCE_MONITORING} records. Skipping evaluation.")
         return False
     if fraud_cases_seen < MIN_FRAUD_CASES_BEFORE_INFERENCE_MONITORING:
@@ -75,6 +80,7 @@ def check_if_should_retrain(base_metrics, current_metrics):
         if base_metrics[metric] - current_metrics[metric] > threshold:
             print("Performance has degraded ---> sending retraining trigger.")
             return True
+    print("Performance has not degraded significantly. Continuing without retraining.")
     return False
 
 

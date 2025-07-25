@@ -11,13 +11,11 @@ def patch_released_labels(pending_path: Path, released_path: Path, now_fn=time.t
     still_pending = []
     released = []
 
-    with open(pending_path, "r") as f:
-        for line in f:
-            entry = json.loads(line)
-            if now_fn() >= entry["label_available_at"]:
-                released.append(entry)
-            else:
-                still_pending.append(entry)
+    for entry in load_jsonl_lines(pending_path):
+        if now_fn() >= entry["label_available_at"]:
+            released.append(entry)
+        else:
+            still_pending.append(entry)
 
     if released:
         with open(released_path, "a") as out_f:
@@ -31,6 +29,17 @@ def patch_released_labels(pending_path: Path, released_path: Path, now_fn=time.t
     if released:
         print(f"[{time.strftime('%X')}] Released {len(released)} label(s)")
 
+def load_jsonl_lines(path):
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError:
+                print(f"Skipping malformed line: {line}")
+                continue
 
 def run_loop():
     print("Starting ground truth patcher...")

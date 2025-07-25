@@ -5,11 +5,14 @@ from statistics import mean
 import pandas as pd
 
 def monitor_loop(log_path: Path, baseline_stats: dict, poll_interval=5):
-    seen = set()
+    seen_ids = set()
     print("Monitoring service is online.")
 
+    if not log_path.exists():
+        print(f"No predictions to analyze. Waiting {poll_interval} seconds...")
+
     while True:
-        new_entries = identify_new_entries(log_path, seen)
+        new_entries = identify_new_entries(log_path, seen_ids)  # Updates `seen_ids`
 
         if new_entries:
             predictions, latencies, transactions, versions = parse_new_entries(new_entries)
@@ -19,12 +22,18 @@ def monitor_loop(log_path: Path, baseline_stats: dict, poll_interval=5):
 
         time.sleep(poll_interval)
 
-def identify_new_entries(log_path: Path, seen: set):
+def identify_new_entries(log_path: Path, seen_ids: set):
+    new_entries = []
     with open(log_path, "r") as f:
-        lines = f.readlines()
-
-    new_entries = [line for line in lines if line not in seen]
-    seen.update(new_entries)
+        for line in f:
+            try:
+                entry = json.loads(line)
+                txn_id = entry.get("transaction_id")
+                if txn_id and txn_id not in seen_ids:
+                    seen_ids.add(txn_id)
+                    new_entries.append(entry)
+            except json.JSONDecodeError:
+                continue
     return new_entries
 
 def parse_new_entries(new_entries):
@@ -33,8 +42,7 @@ def parse_new_entries(new_entries):
     transactions = []
     versions = set()
 
-    for line in new_entries:
-        entry = json.loads(line)
+    for entry in new_entries:
         transactions.append(entry["transaction"])
         predictions.append(entry["prediction"])
         latencies.append(entry["latency_sec"])
