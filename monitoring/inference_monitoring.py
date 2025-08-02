@@ -27,6 +27,7 @@ def monitor_loop(ground_truths_path: Path, predicted_transactions_path: Path, ti
         )
         if predictions.empty or ground_truths.empty:
             time.sleep(time_interval)
+            continue
 
         new_predictions = predictions[
             ~predictions["TransactionID"].isin(patched_records)

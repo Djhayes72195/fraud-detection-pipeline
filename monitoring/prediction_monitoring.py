@@ -140,7 +140,7 @@ def monitor_latency(new_entries):
     if high_latency_count > 0:
         avg_latency = mean(latencies)
         max_latency = max(latencies)
-        print(f"LATENCY ALERT: {100 * high_latency_count}/{len(latencies)}% requests > {LATENCY_THRESHOLD}s")
+        print(f"LATENCY ALERT: {high_latency_count}/{len(latencies)} requests > {LATENCY_THRESHOLD}s")
         print(f"Avg: {avg_latency:.3f}s, Max: {max_latency:.3f}s")
 
 def calc_summary_stats(record_buffer: list) -> dict:
